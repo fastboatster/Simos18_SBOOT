@@ -48,7 +48,8 @@ void seedMT(uint32_t seed, uint32_t *output)
   s1 = state[0], *p0 = *pM ^ (mixBits(s0, s1) >> 1) ^ (loBit(s1) ? K : 0U);
   output[0] = temperMT(s1);
   uint32_t y;
-  for (int i = 1; i < 64; i++)
+  // generate 32 uints:
+  for (int i = 1; i < 32; i++)
   {
     y = *next++;
     output[i] = temperMT(y);
@@ -78,11 +79,10 @@ int main(int argc, char *argv[])
   }
 
   mpz_t n;
-  #ifdef SIMOS1810
-  mpz_init_set_str(n, "b21fd93ed14799a3f3f1db1db0159c385537e81397af0f1908d35a08115dabc13c5580833d82d884f9b4c09127df248e8a7ca815c952c8bbfda097d5b6e56a4072a2842713032229ae55a7307215b8e48c1b7b883a18d7f90e81c766fa8f5f2194efdcfd79fa5174f5a92f5bba5dabb4e2c138c0a5aab35032ecb90eb73ffe0c1ae3d209f421de40ab8363897c0809d93938ebed3e7b25230fdf38795c4e467cccaca5ffb52d49b7130e13aab881fa280c6df9dd4ac7ba0038985064517b6f96d5abef5be3e21cf261068b94fb128cd98cf02a2033c0e1f57b887e401d041f8afc891727d1d04f14422eefd08c4b925e45e2446ec98acaefb42c313e2abae9d5", 16);
-  #else
-  mpz_init_set_str(n, "de5a5615fdda3b76b4ecd8754228885e7bf11fdd6c8c18ac24230f7f770006cfe60465384e6a5ab4daa3009abc65bff2abb1da1428ce7a925366a14833dcd18183bad61b2c66f0d8b9c4c90bf27fe9d1c55bf2830306a13d4559df60783f5809547ffd364dbccea7a7c2fc32a0357ceba3e932abcac6bd6398894a1a22f63bdc45b5da8b3c4e80f8c097ca7ffd18ff6c78c81e94c016c080ee6c5322e1aeb59d2123dce1e4dd20d0f1cdb017326b4fd813c060e8d2acd62e703341784dca667632233de57db820f149964b3f4f0c785c39e2534a7ae36fd115b9f06457822f8a9b7ce7533777a4fb03610d6b4018ab332be4e7ad2f4ac193040e5a037417bc53", 16);
-  #endif
+  // init RSA 1024 public key with id 0x96
+  // hopefully, the endianness is correct here
+  // and it's not 099122370e5bb81c8ee2381ccda9b10f5c48d50d6c1e275620fc6b1ddb4cb45b08fa041cc365367c436732d26e8ce291de920c84bb2b32aca047f6bc8a56059614f91cf588167e5dcd4e31d0a7a2cda76845061df7c490363e2acb0503ab68bc74744dee34ab587829eac8f71dbd2cb9f4b0aa50ca6dd2edbc312c4f13fed8e1
+  mpz_init_set_str(n, "e1d8fe134f2c31bcedd26dca50aab0f4b92cbd1df7c8ea297858ab34ee4d7474bc68ab0305cb2a3e3690c4f71d064568a7cda2a7d0314ecd5d7e1688f51cf9149605568abcf647a0ac322bbb840c92de91e28c6ed23267437c3665c31c04fa085bb44cdb1d6bfc2056271e6c0dd5485c0fb1a9cd1c38e28e1cb85b0e37229109", 16);
   mpz_t e;
   mpz_init_set_ui(e, 65537U);
 
@@ -97,24 +97,27 @@ int main(int argc, char *argv[])
       current_seed = seed;
       seed = seed + 2;
     }
-
-    uint32_t rand_data[64];
+    // an arr of 32 32-bit uints
+    uint32_t rand_data[32];
     seedMT(current_seed, rand_data);
     unsigned char *rand_data_bytes = (unsigned char *)rand_data;
 
     // The last int has the high bits replaced with 0x200, presumably to make the resulting bigint valid within the RSA parameters.
-    rand_data[63] = bswap32(bswap32(rand_data[63] & 0xFFFF) + 0x0200);
+    rand_data[31] = bswap32(bswap32(rand_data[31] & 0xFFFF) + 0x0200);
 
-    // This byte is just straight up set to 0, at 800167d4 in SBOOT, who knows why...
-    rand_data_bytes[245] = 0;
+    // This byte is set to 0x00 to serve as a PKCS v1.5. separator between the message and pseudorandom padding
+    // 0x75 = 117
+    rand_data_bytes[117] = 0;
+    // TODO: check that all the data bytes in the "padding" area are not 0, otherwise replace with 0x01.
+    //  not sure how important this really is, perhaps this happens very infrequently
 
     mpz_t data_num;
     mpz_init(data_num);
-    mpz_import(data_num, 64, -1, 4, -1, 0, rand_data_bytes);
+    mpz_import(data_num, 32, -1, 4, -1, 0, rand_data_bytes);
     mpz_t output;
     mpz_init(output);
     mpz_powm(output, data_num, e, n);
-    unsigned char rsa_output[256];
+    unsigned char rsa_output[128];
     mpz_export(rsa_output, NULL, -1, 4, -1, 0, output);
     mpz_clear(output);
     mpz_clear(data_num);
@@ -129,7 +132,7 @@ int main(int argc, char *argv[])
         printf("Seed: %08X\n", current_seed);
         printf("\nKey Data: \n");
       }
-      for (j = 0; j < 64; j++)
+      for (j = 0; j < 32; j++)
       {
         printf("%08X", rand_data[j]);
       }
@@ -137,7 +140,7 @@ int main(int argc, char *argv[])
       {
 
         printf("\nSeed Data: \n");
-        for (j = 0; j < 64; j++)
+        for (j = 0; j < 32; j++)
         {
           printf(" %08X%s", rsa_output_ints[j], (j % 4) == 4 ? " " : "");
         }
