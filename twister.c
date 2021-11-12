@@ -108,8 +108,22 @@ int main(int argc, char *argv[])
     // This byte is set to 0x00 to serve as a PKCS v1.5. separator between the message and pseudorandom padding
     // 0x75 = 117
     rand_data_bytes[117] = 0;
-    // TODO: check that all the data bytes in the "padding" area are not 0, otherwise replace with 0x01.
+    // DONE: check that all the data bytes in the "padding" area are not 0, otherwise replace with 0x01.
     //  not sure how important this really is, perhaps this happens very infrequently
+    int k;
+    // go over the padding bytes and replace any 0 bytes with 0x01
+    for (k=118; k < 126; k++ )
+      {
+        // check if any bytes in padding area are 0:
+          if (rand_data_bytes[k] == 0) {
+            //
+              if (!suppress_output)
+              {
+                  printf("**** Detected 0x00 byte in the padding area, replacing with 0x01 ****\n");
+              };
+              rand_data_bytes[k] = 0x01
+          };
+      };
 
     mpz_t data_num;
     mpz_init(data_num);
