@@ -1,4 +1,5 @@
 # About
+This is a humble attempt to adopt bri3d's Simos 18 ECU exploit to older Simos 8.5 ECUs. This README still contains most of the details relevant to Simos 18 ECU (with some Simos 8.5 notes)
 
 This project provides documentation about the Supplier Bootloader (SBOOT) provided in Simos18 ECUs, with a focus on the OTP/Customer Protection module supplied by VW AG in VW vehicles.
 
@@ -23,8 +24,8 @@ First, the Simos18 boot process needs to be interrupted so it arrives in SBOOT, 
 If these two signals are present, the ECU knows it's time to go into the Supplier Bootloader. Next, the ECU expects some CAN messages on the normal Powertrain CAN pins to tell it it REALLY is time to go into SBOOT, and then it loads up the SBOOT command processor and an ISO-TP stack.
 
 Next, the SBOOT command processor expects some custom commands sent over ISO-TP, which ideally are used to upload a manufacturer-provided custom bootloader. Where things really get interesting is that there's a Seed/Key process before any extended access is allowed to the command processor.
-The Seed/Key process looks secure on the surface. The ECU sends 256 bytes of psuedo-random (Mersenne Twister) data encrypted using an RSA public key (M ^ E mod N) to the client and expects the client to send the decrypted data back. Given how RSA works, this SHOULD require the private key, but there is a fatal mistake:
-The ECU does not seed the Seed/Key process with real OR enough entropy (randomness). There are two mistakes: the random number generator is seeded with the system timer, which is not a source of entropy because it behaves predictably, and the random number generator is only seeded with 31 bits (231 possible values) worth of data, which can easily be calculated on a modern processor in seconds to minutes.
+The Seed/Key process looks secure on the surface. The ECU sends 256 bytes of pseudo-random (Mersenne Twister) data encrypted using an RSA public key (M ^ E mod N) to the client and expects the client to send the decrypted data back. Given how RSA works, this SHOULD require the private key, but there is a fatal mistake:
+The ECU does not seed the Seed/Key process with real OR enough entropy (randomness). There are two mistakes: the random number generator is seeded with the system timer, which is not a source of entropy because it behaves predictably, and the random number generator is only seeded with 31 bits (2^31 possible values) worth of data, which can easily be calculated on a modern processor in seconds to minutes.
 
 This process could be exploited by carefully controlling the timing of the Seed message to always cause the same message to be sent (there is a countermeasure against this, where Seed isn't accepted until the ECU has been running for a few hundred ms, but it's a weak countermeasure because it's still a fixed time value). Or it could be exploited by generating a huge rainbow table of all possible values. But the easiest way to exploit it is a combination: to send the Seed message at a predictable time, and then brute-force over a small keyspace until we find a Key message which encrypts to match the Seed. https://github.com/bri3d/Simos18_SBOOT/blob/main/twister.c
 
@@ -280,3 +281,6 @@ abf425508513c27314e31d3542b92b1b
 ```
 
 If everything works (I recommend testing a single iteration using the step-by-step instructions above), the `crchack` and reset process has now been automated to dump boot passwords with a single command - the last line of output is the passwords. This relies on the seed start-value being valid for your setup (see above around `twister`) and everything being connected properly. The four example `dumpmem` commands will "back up" your ECU and produce a "bench read" - the PMU PFlash and DFlash. You *cannot* currently use these to clone from ECU to ECU - the OTP area at 80014000 is married to the PMU ID and boot passwords, and the DFlash is encrypted using the PMU ID as part of the initialization material.
+
+# Simos 8.5 Notes
+Simos 8.5 is vey similar to Simos 18. However, in case of Simos 8.5 ECU, 1024 bit RSA key (id 0x96) is used. Thus, only 128 bytes of seed material returned which is reflected in the updated `twister.c` code.
