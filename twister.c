@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
               {
                   printf("**** Detected 0x00 byte in the padding area, replacing with 0x01 ****\n");
               };
-              rand_data_bytes[k] = 0x01
+              rand_data_bytes[k] = 0x01;
           };
       };
 
